@@ -24,15 +24,18 @@ python openAWS.py
 * `--all-regions=True` (optional)
     * You may set this to True, if you want to run this in all regions
     * By default, this is set to False
+* `--out-file="open-ports.json"` (optional)
+    * You may set this to a file name to output the open ports for each instance to a file
+    * By default, it does not output to a file.
+* `--verbose=True` (optional)
 
 ## To do
-* take command line parameters
 * implement in Lambda
     * Keep a dictionary of SGs and Instances attached to the SGs in S3 of known SGs open to the world
     * Do a deepdiff to the new dictionary on lambda execution.
     * If new SGs are found, send an alert to admin
     * If instances are assigned a new SG that is more open then previously, send an alert to admin
-* Output to a file so you can run an nmap scan based the output of the file
+* Add protocol for port
 
 ## Least Privilege IAM Policy
 ```json

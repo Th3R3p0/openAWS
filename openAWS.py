@@ -1,12 +1,17 @@
 import boto3
 import argparse
+import json
 
 # defaults to only look at running instances. Add "stopped" to list if you want
 #  to check for stopped instances as well
 CHECK_INSTANCES = ["running"]
+VERBOSITY = False
+
+
 ALL_REGIONS = ["us-east-1", "us-east-2", "us-west-1", "us-west-2", "ap-south-1", "ap-northeast-1", "ap-northeast-2",
                "ap-southeast-1", "ap-southeast-2", "ca-central-1", "eu-central-1", "eu-west-1", "eu-west-2",
                "sa-east-1"]
+
 
 # this function returns a list of instance objects based on a state filter
 def get_instances(ec2client, filter):
@@ -60,15 +65,14 @@ def populate_aws_objects(ec2client, ec2resource, region):
         AWS_OBJECTS[region]['security-groups'][sgroup]["open_ports"] = ports
 
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='A tool to list open ports to your EC2 instances based on your'
                                                  'security groups.')
-    parser.add_argument('--region',
-                        help='Specify a specific region. If none set, region from AWS config will be used. You'
-                             'can also specify multiple regions', nargs="*")
-    parser.add_argument('--all-regions', help='Set to True, if you want to run in all regions', type=bool,
-                        default=False)
+    parser.add_argument('--region', help='Specify a specific region. If not set, region from AWS config will be used.'
+                                         'You can also specify multiple regions', nargs="*")
+    parser.add_argument('--all-regions', help='Set to True, if you want to run in all regions', type=bool)
+    parser.add_argument('--verbose', help="Set this to True, if you want verbose otuput", type=bool)
+    parser.add_argument('--out-file', help="Outputs instances with open ports to file in dictionary format", type=str)
     args = parser.parse_args()
     if args.region and args.all_regions:
         raise ValueError("You cannot specify `region` and `all-regions` at the same time.")
@@ -78,9 +82,10 @@ if __name__ == "__main__":
         regions = ALL_REGIONS
     else:
         regions = [boto3.session.Session().region_name]
+    if args.verbose == True:
+        VERBOSITY = True
 
     AWS_OBJECTS = {}
-
 
     for region in regions:
         AWS_OBJECTS[region] = {
@@ -90,11 +95,14 @@ if __name__ == "__main__":
 
         ec2client = boto3.client('ec2', region_name=region)
         ec2resource = boto3.resource('ec2', region_name=region)
-        print("Fetching data for {}".format(region))
+        if VERBOSITY:
+            print("Fetching data for {}".format(region))
 
         populate_aws_objects(ec2client, ec2resource, region)
 
+    open_hosts = {}
     for region, objects in AWS_OBJECTS.iteritems():
+        open_hosts[region] = {}
         print("========================")
         print("Region: {}".format(region))
         for instanceid, object in objects['instances'].iteritems():
@@ -106,12 +114,22 @@ if __name__ == "__main__":
                             i = "*"
                         open_ports.append(i)
             if open_ports:
+                open_hosts[region][instanceid] = {
+                    "IP": object.get('PublicIpAddress'),
+                    "Open-Ports": open_ports,
+                }
                 print("-------------------")
                 print("Instance ID: {}".format(instanceid))
                 if object.get('Tags'):
                     for i in object.get('Tags'):
                         if i.get('Key') == 'Name':
+                            open_hosts[region][instanceid]["Instance-Name"] = i.get('Value')
                             print("Name: {}".format(i.get('Value')))
+                else:
+                    open_hosts[region][instanceid]["Instance-Name"] = None
                 if object.get('PublicIpAddress'):
                     print("Public IP: {}".format(object.get('PublicIpAddress')))
                 print("Open Ports: {}".format(open_ports))
+    if args.out_file:
+        with open(args.out_file, 'w') as f:
+            f.writelines(json.dumps(open_hosts))
