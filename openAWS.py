@@ -16,6 +16,7 @@ def get_instances(ec2client, filter):
     return instances
 
 
+
 # this function will return a list of security groups associated with an instance
 def get_related_sgroups(instance):
     sgroups = []
@@ -31,58 +32,54 @@ def get_open_sgroups(ec2resource, sgroup):
     ports = []
     sg_details = ec2resource.SecurityGroup(sgroup)
     for permission in sg_details.ip_permissions:
-      for range in permission.get('IpRanges'):
-          if range.get('CidrIp') == '0.0.0.0/0':
-              ports.append(permission.get('FromPort'))
+        for range in permission.get('IpRanges'):
+            if range.get('CidrIp') == '0.0.0.0/0':
+                ports.append(permission.get('FromPort'))
     return ports
 
 
-def execute():
+if __name__ == "__main__":
     ec2client = boto3.client('ec2')
     ec2resource = boto3.resource('ec2')
 
-    # instance_sgroups will contain a mapping of instances to security groups
-    instance_sgroups = {}
-
-    # sgroups_instance will contain a mapping of security groups to instances
-    sgroups_instance = {}
-
-    # all_sgroups will contain an index of all security groups associated with instances
-    all_sgroups = []
-
-    # sgroups_open_ports will contain a mapping of sgroups to open ports
-    sgroups_open_ports = {}
-
+    aws_objects = {
+      "instances": {},
+      "security-groups": {}
+    }
 
     instances = get_instances(ec2client, CHECK_INSTANCES)
     for instance in instances:
-        get_related_sgroups(instance)
-        instance_sgroups.setdefault(instance.get('InstanceId'), {})
+        aws_objects["instances"][instance.get('InstanceId')] = instance
         sgroups = get_related_sgroups(instance)
         for sgroup in sgroups:
-            sgroups_instance.setdefault(sgroup, [])
-            sgroups_instance[sgroup].append(instance.get('InstanceId'))
-        instance_sgroups[instance.get('InstanceId')] = sgroups
-        [all_sgroups.append(i) for i in sgroups]
-        print(instance)
+            aws_objects["security-groups"][sgroup] = {}
 
-    for sgroup in all_sgroups:
-        open_ports = get_open_sgroups(ec2resource, sgroup)
+    for sgroup in aws_objects['security-groups']:
+        sgroup_info = ec2resource.SecurityGroup(sgroup)
+        aws_objects['security-groups'].setdefault(sgroup, {})
+        aws_objects['security-groups'][sgroup]["full_object"] = sgroup_info.ip_permissions
+        ports = []
+        for permission in sgroup_info.ip_permissions:
+            for range in permission.get('IpRanges'):
+                if range.get('CidrIp') == '0.0.0.0/0':
+                    ports.append(permission.get('FromPort'))
+        aws_objects['security-groups'][sgroup]["open_ports"] = ports
+
+    for instanceid, object in aws_objects.get("instances").iteritems():
+        open_ports = []
+        for sg in object['SecurityGroups']:
+            if aws_objects['security-groups'][sg.get('GroupId')]['open_ports']:
+                for i in aws_objects['security-groups'][sg.get('GroupId')]['open_ports']:
+                    if i == 0:
+                        i = "*"
+                    open_ports.append(i)
         if open_ports:
-            sgroups_open_ports.setdefault(sgroup, [])
-            sgroups_open_ports[sgroup] = open_ports
-
-    return instance_sgroups, sgroups_open_ports, sgroups_instance
-
-if __name__ == "__main__":
-    instance_sgroups, sgroups_open_ports, sgroups_instance = execute()
-    # todo: the following lines have some logic issues i think
-    print('The following instances have ports open to the world')
-    for sg in sgroups_open_ports.keys():
-        for sgroup, instance in sgroups_instance.iteritems():
-            if sg == sgroup:
-                i = instance.pop()
-                print(i)
-                print(sgroups_open_ports.get(sg))
-
-
+            print("=====================")
+            print("Instance ID: {}".format(instanceid))
+            if object.get('Tags'):
+                for i in object.get('Tags'):
+                    if i.get('Key') == 'Name':
+                        print("Name: {}".format(i.get('Value')))
+            if object.get('PublicIpAddress'):
+                print("Public IP: {}".format(object.get('PublicIpAddress')))
+            print("Open Ports: {}".format(open_ports))
