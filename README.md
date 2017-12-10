@@ -11,10 +11,19 @@ pip install -r requirements.txt
 * Ensure you have setup AWS config in `~/.aws/config` and `~/.aws/credentials`
     * See [AWS Documentation](http://docs.aws.amazon.com/cli/latest/userguide/cli-chap-getting-started.html)
     * IAM Policy Requirements: This tool only needs to read your Security Groups and EC2 instances. You can create a new policy for this or use the already existing `SecurityAudit` policy. This will grant a little more than needed, but only read-only access to your AWS account. See the bottom of readme for an example policy that uses the least amount of privileges.
+
 ## To run
 ```
 python openAWS.py
 ```
+
+### Command Line Parameters
+* `--region` (optional)
+    * You may specify one or multiple regions seperated by spaces
+    * If not configured, this will default to pull from your AWS config file
+* `--all-regions=True` (optional)
+    * You may set this to True, if you want to run this in all regions
+    * By default, this is set to False
 
 ## To do
 * take command line parameters
